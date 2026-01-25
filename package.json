@@ -1,0 +1,28 @@
+{
+  "name": "stellar-tauri-ts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "frontend",
+    "backend",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "concurrently -n backend,frontend \"npm run dev -w backend\" \"npm run dev -w frontend\"",
+    "dev:tauri": "tauri dev",
+    "build": "npm run build -w frontend && npm run build -w backend && npm run sync:backend && npm run sync:node",
+    "build:tauri": "npm run build && tauri build && npm run sync:release",
+    "sync:backend": "node scripts/sync-backend.mjs",
+    "sync:node": "node scripts/sync-node.mjs",
+    "sync:release": "node scripts/sync-release.mjs",
+    "typecheck": "npm run typecheck -w frontend && npm run typecheck -w backend",
+    "lint": "echo \"No linter configured\""
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "concurrently": "^8.2.2",
+    "date-fns": "^2.30.0",
+    "typescript": "^5.3.3"
+  }
+}
