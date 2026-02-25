@@ -1,0 +1,22 @@
+{
+  "name": "stellar",
+  "version": "3.4.22",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "frontend",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w frontend",
+    "dev:tauri": "tauri dev",
+    "build": "npm run build -w frontend",
+    "build:tauri": "npm run build && tauri build",
+    "typecheck": "npm run typecheck -w frontend",
+    "lint": "echo \"No linter configured\""
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "typescript": "^5.3.3"
+  }
+}
