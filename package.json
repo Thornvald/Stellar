@@ -1,6 +1,6 @@
 {
   "name": "stellar",
-  "version": "3.4.22",
+  "version": "3.4.23",
   "private": true,
   "type": "module",
   "workspaces": [

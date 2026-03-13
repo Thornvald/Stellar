@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -137,23 +137,134 @@ fn format_label(name: &str, version: &Option<String>) -> String {
     }
 }
 
+fn collect_files_with_suffix(dir: &Path, suffix: &str, files: &mut Vec<PathBuf>) {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files_with_suffix(&path, suffix, files);
+            continue;
+        }
+
+        if path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.ends_with(suffix))
+        {
+            files.push(path);
+        }
+    }
+}
+
+fn pick_preferred_name(mut candidates: Vec<String>, preferred_name: &str) -> Option<String> {
+    if candidates.is_empty() {
+        return None;
+    }
+
+    candidates.sort_unstable();
+    candidates.dedup();
+
+    let preferred_editor_target = format!("{}Editor", preferred_name);
+
+    if let Some(candidate) = candidates
+        .iter()
+        .find(|candidate| candidate.as_str() == preferred_editor_target.as_str())
+    {
+        return Some(candidate.clone());
+    }
+
+    if let Some(candidate) = candidates.iter().find(|candidate| {
+        candidate
+            .strip_suffix("Editor")
+            .is_some_and(|base_name| base_name == preferred_name)
+    }) {
+        return Some(candidate.clone());
+    }
+
+    if candidates.len() == 1 {
+        return candidates.into_iter().next();
+    }
+
+    candidates.into_iter().next()
+}
+
 fn derive_editor_target(project_path: &str) -> Result<String, String> {
     let path = PathBuf::from(project_path);
     if !path.exists() {
         return Err(format!("Project file not found at {:?}", path));
     }
 
-    let stem = path
+    let preferred_name = path
         .file_stem()
         .ok_or_else(|| "Project file name is invalid".to_string())?
         .to_string_lossy()
         .to_string();
 
-    if stem.to_lowercase().ends_with("editor") {
-        Ok(stem)
-    } else {
-        Ok(format!("{}Editor", stem))
+    let project_dir = path
+        .parent()
+        .ok_or_else(|| "Project directory is invalid".to_string())?;
+    let source_dir = project_dir.join("Source");
+
+    if !source_dir.exists() {
+        return Err(format!("Source directory not found at {:?}", source_dir));
     }
+
+    let mut target_files = Vec::new();
+    collect_files_with_suffix(&source_dir, ".Target.cs", &mut target_files);
+
+    let mut editor_targets = Vec::new();
+    for target_file in target_files {
+        let file_name = match target_file.file_name().and_then(|name| name.to_str()) {
+            Some(file_name) => file_name,
+            None => continue,
+        };
+
+        let target_name = match file_name.strip_suffix(".Target.cs") {
+            Some(target_name) => target_name,
+            None => continue,
+        };
+
+        let is_editor_target = target_name.ends_with("Editor")
+            || fs::read_to_string(&target_file)
+                .map(|content| content.contains("TargetType.Editor"))
+                .unwrap_or(false);
+
+        if is_editor_target {
+            editor_targets.push(target_name.to_string());
+        }
+    }
+
+    if let Some(target_name) = pick_preferred_name(editor_targets, &preferred_name) {
+        return Ok(target_name);
+    }
+
+    let mut build_files = Vec::new();
+    collect_files_with_suffix(&source_dir, ".Build.cs", &mut build_files);
+
+    let module_names = build_files
+        .into_iter()
+        .filter_map(|build_file| {
+            build_file
+                .file_name()
+                .and_then(|name| name.to_str())
+                .and_then(|name| name.strip_suffix(".Build.cs"))
+                .map(str::to_string)
+        })
+        .map(|module_name| format!("{}Editor", module_name))
+        .collect();
+
+    if let Some(target_name) = pick_preferred_name(module_names, &preferred_name) {
+        return Ok(target_name);
+    }
+
+    Err(
+        "Could not detect an Unreal Editor target from Source/*.Target.cs or Source/*.Build.cs"
+            .to_string(),
+    )
 }
 
 // Tauri Commands

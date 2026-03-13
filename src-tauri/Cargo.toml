@@ -1,6 +1,6 @@
 [package]
 name = "stellar-tauri-ts"
-version = "0.1.0"
+version = "3.4.23"
 description = "Stellar - Unreal Engine Project Builder"
 authors = ["DevUser"]
 edition = "2021"
